@@ -10,6 +10,54 @@ FFT, spectral analysis and filter design for ECG denoising, built from first pri
 
 ---
 
+## Key results at a glance
+
+**Where the noise lives**
+
+<img src="results/figures/02_noise_psd.png" alt="Where the noise lives" width="820">
+
+<sub>Power spectra of ECG record 100 and the three NSTDB noise types, scaled to 6 dB SNR, against the 0.5-40 Hz pass-band. Record 100 itself shows a 60 Hz mains peak and its 120 Hz harmonic.</sub>
+
+**Spectrogram (own STFT implementation)**
+
+<img src="results/figures/02_spectrogram.png" alt="Spectrogram (own STFT implementation)" width="820">
+
+<sub>Clean record vs a synthetic mix of baseline wander, muscle noise and 60 Hz hum. Vertical stripes are QRS complexes; the horizontal line near 60 Hz is mains interference (already faintly present in the raw record).</sub>
+
+**Own FFT vs numpy.fft on real ECG**
+
+<img src="results/figures/01_fft_vs_numpy_ecg.png" alt="Own FFT vs numpy.fft on real ECG" width="820">
+
+<sub>The hand-written radix-2 FFT matches numpy to about 1e-13 (rounding error only).</sub>
+
+**Bilinear transform and pre-warping**
+
+<img src="results/figures/04_iir_bilinear_prewarp.png" alt="Bilinear transform and pre-warping" width="820">
+
+<sub>Without pre-warping, a 20/150 Hz design lands near 20/105 Hz; with pre-warping the edges are exact.</sub>
+
+**Phase distortion on one QRS complex**
+
+<img src="results/figures/04_phase_distortion_qrs.png" alt="Phase distortion on one QRS complex" width="820">
+
+<sub>R-peak shift in one beat: FIR -2.8 ms, causal IIR +5.6 ms, filtfilt -2.8 ms (one sample is 2.78 ms at 360 Hz).</sub>
+
+**SNR improvement vs input SNR**
+
+<img src="results/figures/06_snr_improvement.png" alt="SNR improvement vs input SNR" width="820">
+
+<sub>Gains are real where noise dominates (baseline wander about +7 dB at 0 dB input) and negative at high input SNR because the raw record is the reference. See "Reading the real-data results" below.</sub>
+
+**Before / after on electrode-motion noise**
+
+<img src="results/figures/06_before_after_em.png" alt="Before / after on electrode-motion noise" width="820">
+
+<sub>Electrode motion overlaps the ECG band and is the hardest noise for linear filters.</sub>
+
+More figures and how to read them: see [Section 6](#6-figures-and-how-to-read-them).
+
+---
+
 ## 1. Motivation
 
 An ECG is a small (~1 mV) signal sitting on three classic contaminants that live in different parts of the
@@ -169,23 +217,120 @@ data-dependent plots (marked *data*) should be checked against your own run.
 
 | Figure | Interpretation (2 lines) |
 |---|---|
-| `01_fft_vs_numpy_ecg.png` | The ECG spectrum from our FFT lies exactly under numpy's; the error panel sits at ~1e-13 or below (rounding only). A 3600-sample ECG is zero-padded to 4096, which interpolates the spectrum without changing it. |
-| `01_fft_benchmark.png` | The naive DFT curve bends up to slope 2 (N²) while the radix-2 curves grow ~N log N; numpy is far faster in absolute terms because it is C. At small N the Python-vectorised iterative version is dominated by per-call overhead, so only the large-N end shows the asymptote (the reference laws are anchored there). *timings machine-dependent* |
-| `02_windows.png` | Rectangular has the narrowest main lobe but -13 dB sidelobes decaying slowly; Hann/Hamming/Blackman widen the main lobe to 4-6 bins and push sidelobes to -31/-43/-58 dB. This is the resolution vs dynamic-range trade-off in one picture. |
-| `02_leakage_demo.png` | Left: two equal tones 2.3 bins apart are clearly resolved by rectangular, barely by Hann, merged by Blackman. Right: a tone 50 dB weaker is hidden under rectangular leakage but visible with Hann/Blackman. |
-| `02_welch_vs_scipy.png` | Our Welch lies on top of `scipy.signal.welch` (relative difference ~1e-14); the single periodogram is visibly much noisier. *data* The ECG PSD should be dominated by energy below ~25 Hz with a QRS-related bump around 5-20 Hz. |
-| `02_noise_psd.png` | *data* Expect `bw` energy concentrated below ~1 Hz, `em` at low frequencies and bursty, `ma` broadband and relatively strong above 20 Hz, against the shaded 0.5-40 Hz pass-band. This is the empirical justification for the band edges. |
-| `02_spectrogram.png` | Clean ECG: one vertical stripe per beat (broadband QRS) rising to ~40 Hz. Noisy: a horizontal line at the mains frequency, a haze of muscle noise at high frequency, and extra low-frequency power from wander. |
-| `03_fir_design.png` | Taps grow as 1/Δf and with window K (2377 at 0.5 Hz/Hamming). Our response overlays `firwin` exactly; Hamming trades a little transition width for ~53 dB stop-band versus the rectangular window's Gibbs ripple. |
-| `03_fir_linear_phase.png` | Phase is a straight line −ωM/2 in the pass-band, group delay is flat at 3.3 s, deviation from linear is numerically zero. Symmetric taps are the reason. |
-| `04_iir_bilinear_prewarp.png` | The tan warping curve diverges from the linear map near Nyquist. Without pre-warping a 20/150 Hz design lands near 20/105 Hz (the script prints the measured edges); with it, edges are exact. |
-| `04_iir_design.png` | Higher order gives steeper skirts but larger low-frequency group delay. The (b,a) polynomial form deviates from SOS as order grows and goes unstable at higher orders (the script prints the max pole radius). |
-| `04_phase_distortion_qrs.png` | *data* FIR and `filtfilt` keep the R peak where the input has it; the causal IIR shifts it later by a few ms and bends the QRS/ST shape. The difference panel shows where the causal filter departs from the linear-phase output. |
-| `04_notch_demo.png` | The notch carves a narrow null at the mains frequency in the PSD while leaving neighbouring frequencies and the ECG band untouched. Notch response: deep null at f0, ~0 dB elsewhere. |
+| [`01_fft_vs_numpy_ecg.png`](results/figures/01_fft_vs_numpy_ecg.png) | The ECG spectrum from our FFT lies exactly under numpy's; the error panel sits at ~1e-13 or below (rounding only). A 3600-sample ECG is zero-padded to 4096, which interpolates the spectrum without changing it. |
+| [`01_fft_benchmark.png`](results/figures/01_fft_benchmark.png) | The naive DFT curve bends up to slope 2 (N²) while the radix-2 curves grow ~N log N; numpy is far faster in absolute terms because it is C. At small N the Python-vectorised iterative version is dominated by per-call overhead, so only the large-N end shows the asymptote (the reference laws are anchored there). *timings machine-dependent* |
+| [`02_windows.png`](results/figures/02_windows.png) | Rectangular has the narrowest main lobe but -13 dB sidelobes decaying slowly; Hann/Hamming/Blackman widen the main lobe to 4-6 bins and push sidelobes to -31/-43/-58 dB. This is the resolution vs dynamic-range trade-off in one picture. |
+| [`02_leakage_demo.png`](results/figures/02_leakage_demo.png) | Left: two equal tones 2.3 bins apart are clearly resolved by rectangular, barely by Hann, merged by Blackman. Right: a tone 50 dB weaker is hidden under rectangular leakage but visible with Hann/Blackman. |
+| [`02_welch_vs_scipy.png`](results/figures/02_welch_vs_scipy.png) | Our Welch lies on top of `scipy.signal.welch` (relative difference ~1e-14); the single periodogram is visibly much noisier. *data* The ECG PSD should be dominated by energy below ~25 Hz with a QRS-related bump around 5-20 Hz. |
+| [`02_noise_psd.png`](results/figures/02_noise_psd.png) | *data* Expect `bw` energy concentrated below ~1 Hz, `em` at low frequencies and bursty, `ma` broadband and relatively strong above 20 Hz, against the shaded 0.5-40 Hz pass-band. This is the empirical justification for the band edges. |
+| [`02_spectrogram.png`](results/figures/02_spectrogram.png) | One vertical stripe per beat (broadband QRS). Record 100 already contains real 60 Hz mains hum, so a faint horizontal line near 60 Hz appears even in the "clean" panel; the noisy panel (synthetic mix: wander 12 dB + muscle 12 dB + 60 Hz hum 18 dB) makes that line stronger and adds low-frequency and high-frequency haze. |
+| [`03_fir_design.png`](results/figures/03_fir_design.png) | Taps grow as 1/Δf and with window K (2377 at 0.5 Hz/Hamming). Our response overlays `firwin` exactly; Hamming trades a little transition width for ~53 dB stop-band versus the rectangular window's Gibbs ripple. |
+| [`03_fir_linear_phase.png`](results/figures/03_fir_linear_phase.png) | Phase is a straight line −ωM/2 in the pass-band, group delay is flat at 3.3 s, deviation from linear is numerically zero. Symmetric taps are the reason. |
+| [`04_iir_bilinear_prewarp.png`](results/figures/04_iir_bilinear_prewarp.png) | The tan warping curve diverges from the linear map near Nyquist. Without pre-warping a 20/150 Hz design lands near 20/105 Hz (the script prints the measured edges); with it, edges are exact. |
+| [`04_iir_design.png`](results/figures/04_iir_design.png) | Higher order gives steeper skirts but larger low-frequency group delay. The (b,a) polynomial form deviates from SOS as order grows and goes unstable at higher orders (the script prints the max pole radius). |
+| [`04_phase_distortion_qrs.png`](results/figures/04_phase_distortion_qrs.png) | *data* FIR and `filtfilt` keep the R peak where the input has it; the causal IIR shifts it later by a few ms and bends the QRS/ST shape. The difference panel shows where the causal filter departs from the linear-phase output. |
+| [`04_notch_demo.png`](results/figures/04_notch_demo.png) | The notch carves a narrow null at the mains frequency in the PSD while leaving neighbouring frequencies and the ECG band untouched. Notch response: deep null at f0, ~0 dB elsewhere. |
 | `05_report_*.png` (5 files) | Per filter: magnitude, phase, group delay, pole-zero, impulse and step responses. FIR: flat group delay, symmetric impulse response (pole-zero shown for a 41-tap surrogate because a 2376-degree polynomial cannot be root-found reliably). Causal IIR: all poles inside the unit circle, zeros at z=±1 (DC/Nyquist) and on the circle at the notch, non-flat group delay peaking near 0.5 Hz and at the notch. Filtfilt: zero phase, symmetric (non-causal) impulse response with squared magnitude. |
 | `06_before_after_{bw,em,ma}.png` | *data* Stacked traces (noisy, FIR, IIR causal, lag-corrected, filtfilt) over the clean record at 6 dB with detected R peaks. Expect wander removed cleanly, muscle noise reduced but not removed, and electrode motion the hardest because it overlaps the ECG band. |
-| `06_snr_improvement.png` | *data* ΔSNR vs input SNR per noise type and method. Zero-phase methods should track each other closely; the causal IIR is expected to sit lower at high input SNR because its distortion floor (see Limitations) caps SNR_out. |
-| `06_peak_f1.png` | *data* R-peak F1 vs input SNR. Detection degrades as SNR falls; filtering helps most for baseline wander and least for electrode motion. Differences between filters shrink at high SNR. |
+| [`06_snr_improvement.png`](results/figures/06_snr_improvement.png) | *data* ΔSNR vs input SNR per noise type and method. Zero-phase methods should track each other closely; the causal IIR is expected to sit lower at high input SNR because its distortion floor (see Limitations) caps SNR_out. |
+| [`06_peak_f1.png`](results/figures/06_peak_f1.png) | *data* R-peak F1 vs input SNR. Detection degrades as SNR falls; filtering helps most for baseline wander and least for electrode motion. Differences between filters shrink at high SNR. |
+
+<details>
+<summary>All figures (click to expand)</summary>
+
+**`01_fft_benchmark.png`**
+
+<img src="results/figures/01_fft_benchmark.png" alt="01_fft_benchmark.png" width="820">
+
+**`01_fft_vs_numpy_ecg.png`**
+
+<img src="results/figures/01_fft_vs_numpy_ecg.png" alt="01_fft_vs_numpy_ecg.png" width="820">
+
+**`02_leakage_demo.png`**
+
+<img src="results/figures/02_leakage_demo.png" alt="02_leakage_demo.png" width="820">
+
+**`02_noise_psd.png`**
+
+<img src="results/figures/02_noise_psd.png" alt="02_noise_psd.png" width="820">
+
+**`02_spectrogram.png`**
+
+<img src="results/figures/02_spectrogram.png" alt="02_spectrogram.png" width="820">
+
+**`02_welch_vs_scipy.png`**
+
+<img src="results/figures/02_welch_vs_scipy.png" alt="02_welch_vs_scipy.png" width="820">
+
+**`02_windows.png`**
+
+<img src="results/figures/02_windows.png" alt="02_windows.png" width="820">
+
+**`03_fir_design.png`**
+
+<img src="results/figures/03_fir_design.png" alt="03_fir_design.png" width="820">
+
+**`03_fir_linear_phase.png`**
+
+<img src="results/figures/03_fir_linear_phase.png" alt="03_fir_linear_phase.png" width="820">
+
+**`04_iir_bilinear_prewarp.png`**
+
+<img src="results/figures/04_iir_bilinear_prewarp.png" alt="04_iir_bilinear_prewarp.png" width="820">
+
+**`04_iir_design.png`**
+
+<img src="results/figures/04_iir_design.png" alt="04_iir_design.png" width="820">
+
+**`04_notch_demo.png`**
+
+<img src="results/figures/04_notch_demo.png" alt="04_notch_demo.png" width="820">
+
+**`04_phase_distortion_qrs.png`**
+
+<img src="results/figures/04_phase_distortion_qrs.png" alt="04_phase_distortion_qrs.png" width="820">
+
+**`05_report_butter_bandpass.png`**
+
+<img src="results/figures/05_report_butter_bandpass.png" alt="05_report_butter_bandpass.png" width="820">
+
+**`05_report_fir_bandpass.png`**
+
+<img src="results/figures/05_report_fir_bandpass.png" alt="05_report_fir_bandpass.png" width="820">
+
+**`05_report_iir_causal.png`**
+
+<img src="results/figures/05_report_iir_causal.png" alt="05_report_iir_causal.png" width="820">
+
+**`05_report_iir_filtfilt.png`**
+
+<img src="results/figures/05_report_iir_filtfilt.png" alt="05_report_iir_filtfilt.png" width="820">
+
+**`05_report_notch.png`**
+
+<img src="results/figures/05_report_notch.png" alt="05_report_notch.png" width="820">
+
+**`06_before_after_bw.png`**
+
+<img src="results/figures/06_before_after_bw.png" alt="06_before_after_bw.png" width="820">
+
+**`06_before_after_em.png`**
+
+<img src="results/figures/06_before_after_em.png" alt="06_before_after_em.png" width="820">
+
+**`06_before_after_ma.png`**
+
+<img src="results/figures/06_before_after_ma.png" alt="06_before_after_ma.png" width="820">
+
+**`06_peak_f1.png`**
+
+<img src="results/figures/06_peak_f1.png" alt="06_peak_f1.png" width="820">
+
+**`06_snr_improvement.png`**
+
+<img src="results/figures/06_snr_improvement.png" alt="06_snr_improvement.png" width="820">
+
+</details>
 
 ## 7. Results
 
