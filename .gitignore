@@ -1,0 +1,9 @@
+__pycache__/
+.ipynb_checkpoints/
+.pytest_cache/
+data/mitdb/
+data/nstdb/
+results_synthetic/
+.venv/
+*.pyc
+docs/STUDY_PLAN_AND_INTERVIEW_GUIDE.md

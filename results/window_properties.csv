@@ -1,0 +1,5 @@
+window,coherent_gain,enbw_bins,mainlobe_null_bins,bw3db_bins,peak_sidelobe_db
+rectangular,1.0,1.0,2.0,0.887,-13.254
+hann,0.5,1.5,4.0,1.441,-31.467
+hamming,0.54,1.363,4.0,1.305,-42.449
+blackman,0.42,1.727,6.0,1.645,-58.11
