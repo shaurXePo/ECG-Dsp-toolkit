@@ -592,7 +592,33 @@ Download more DS1/DS2 records before drawing any. The script prints the split an
 ### YOLO results (filled from your own run)
 
 <!-- YOLO:START -->
-_Not generated yet. After training, run `python scripts/08_yolo_results.py --update-readme`. No number is written here by hand._
+_Filter before rendering: **IIR (filtfilt)** (mains 60.0 Hz); windows 4.0 s / stride 2.0 s; noisy copies: bw, em, ma at 12, 6 dB; seed 42._
+
+**Inter-patient split (de Chazal DS1/DS2)**
+
+| Split | Records | Images | N | S | V | F |
+|---|---|---:|---:|---:|---:|---:|
+| train | 101, 119 | 2016 | 7763 | 0 | 1015 | 0 |
+| val | 207 | 896 | 2149 | 0 | 1351 | 0 |
+| test | 100, 200 | 2016 | 8827 | 77 | 1638 | 0 |
+
+**Test-split detection metrics (DS2 records only)**
+
+| Metric | Value |
+|---|---:|
+| mAP@50 | 0.529 |
+| mAP@50-95 | 0.458 |
+
+**AP@50 per class**
+
+| Class | AP@50 | Test boxes |
+|---|---:|---:|
+| N | 0.984 | 8827 |
+| S | 0.000 | 77 |
+| V | 0.603 | 1638 |
+| F | n/a | 0 |
+
+_Read per-class AP together with the box counts: a class with few test boxes gives an unreliable AP. Numbers come from the files above; they are small-data results unless many DS1/DS2 records were used._
 <!-- YOLO:END -->
 
 ### Limitations of the ML part

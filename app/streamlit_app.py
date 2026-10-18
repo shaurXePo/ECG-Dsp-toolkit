@@ -11,7 +11,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import json
+
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -22,6 +25,7 @@ if str(ROOT) not in sys.path:
 from src import io as ecgio                       # noqa: E402
 from src import noise as ecgnoise                 # noqa: E402
 from src import pipeline                          # noqa: E402
+from vision import evaluate as veval                # noqa: E402
 from vision import infer                           # noqa: E402
 from vision.labels import AAMI_MAP                 # noqa: E402
 from vision.render import render_strip            # noqa: E402
@@ -89,6 +93,33 @@ def mit_records() -> list[str]:
     except Exception:                              # noqa: BLE001
         return []
 
+
+
+@st.cache_data(show_spinner="Running the detector on the whole excerpt...")
+def detect_all(y: np.ndarray, fs: float, use_yolo: bool, weights: str, conf: float):
+    """Detections over the whole filtered excerpt as plain tuples (label, conf, t0, t1) + the detector actually used."""
+    if use_yolo:
+        model, _ = get_yolo(weights)
+        if model is not None:
+            return [(d.label, d.conf, d.t0, d.t1) for d in infer.yolo_detect_long(model, y, fs, conf=conf)], "YOLO"
+    return [(d.label, d.conf, d.t0, d.t1) for d in infer.classical_detect(y, fs)], "classical"
+
+
+def split_status(src_kind: str, rec: str) -> tuple[str, str]:
+    """('ok' | 'warn' | 'info', message): was this record used to train / validate the loaded model?"""
+    if src_kind != "MIT-BIH record":
+        return "info", "Not an MIT-BIH record, so there is no train/test bookkeeping for it."
+    try:
+        sp = json.loads((ROOT / "datasets/ecg_yolo/dataset_summary.json").read_text())["splits"]
+    except Exception:                              # noqa: BLE001
+        return "info", "datasets/ecg_yolo/dataset_summary.json not found: cannot tell whether this record was used for training."
+    if rec in sp.get("train", []):
+        return "warn", f"Record {rec} was a TRAINING record of this model: the result below is optimistic and not a valid test."
+    if rec in sp.get("val", []):
+        return "warn", f"Record {rec} was the VALIDATION record (used to pick the checkpoint): not a clean test."
+    if rec in sp.get("test", []):
+        return "ok", f"Record {rec} is a TEST record (DS2) that the model never saw: this is a fair check."
+    return "info", f"Record {rec} was not used in this run (neither training, validation nor test): unseen, but not part of the reported test set."
 
 # --------------------------------------------------------------------------- sidebar
 st.title("ECG-DSP Lab")
@@ -197,6 +228,44 @@ counts = {}
 for d in dets:
     counts[d.label] = counts.get(d.label, 0) + 1
 c3.metric("Classes", ", ".join(f"{k}:{v}" for k, v in sorted(counts.items())) or "-")
+
+with st.expander("Model check against the reference annotations"):
+    if not len(ann):
+        st.write("This source has no reference annotations (uploaded CSV), so there is nothing to compare with.")
+    else:
+        kind, msg = split_status(src_kind, rec_name)
+        {"ok": st.success, "warn": st.warning, "info": st.info}[kind](msg)
+        if st.checkbox("Run the detector on the whole analysed excerpt and compare"):
+            dets_all, used = detect_all(y, fs, det_kind.startswith("YOLO"), weights, float(conf))
+            trim = 5.0 if total_s > 20 else 0.0                      # drop filter edge transients
+            r_t = ann / fs
+            keep = (r_t >= trim) & (r_t <= total_s - trim)
+            ref_c = [AAMI_MAP.get(str(s)) for s in sym[keep]]
+            ref_t = [t_ for t_, c in zip(r_t[keep], ref_c) if c]
+            ref_c = [c for c in ref_c if c]
+            det = [d for d in dets_all if trim <= 0.5 * (d[2] + d[3]) <= total_s - trim]
+            res = veval.match_detections(ref_t, ref_c, [0.5 * (d[2] + d[3]) for d in det], [d[0] for d in det])
+            st.caption(f"Detector used: {used}. Scored {len(ref_t)} reference beats in {total_s - 2 * trim:.0f} s "
+                       f"(match tolerance 150 ms, edges trimmed {trim:.0f} s).")
+            a, b, c_ = st.columns(3)
+            a.metric("Beat detection sensitivity", f"{100 * res['sens_loc']:.1f} %")
+            b.metric("Precision (PPV)", f"{100 * res['ppv_loc']:.1f} %")
+            c_.metric("False alarms", res["false_positives"])
+            if res["label_aware"]:
+                rows = [{"class": k, "reference beats": v["reference"], "found, right class": v["correct"],
+                         "found, wrong class": v["wrong_class"], "missed": v["missed"],
+                         "class sensitivity": "n/a" if not v["reference"] else f"{100 * v['sensitivity']:.0f} %"}
+                        for k, v in res["per_class"].items() if v["reference"]]
+                st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+                cm = pd.DataFrame(res["matrix"]).T
+                cm = cm.loc[[i for i in cm.index if cm.loc[i].sum()]]
+                st.caption("Confusion matrix: rows = reference class, columns = what the detector said ('missed' = no box).")
+                st.dataframe(cm, width="stretch")
+            else:
+                st.caption("The classical detector only locates beats (it labels all of them 'R'), so no class table. "
+                           "Switch the detector to YOLO to see classes.")
+            st.caption("Few distinct beats make per-class numbers noisy. Classes the model never saw in training "
+                       "(S and F in the pilot run) cannot be found.")
 
 with st.expander("What the detector sees (rendered strip, first 4 s of the window)"):
     if len(seg) >= int(4 * fs):
