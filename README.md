@@ -1,42 +1,41 @@
-# ECG-DSP-Toolkit
+<div align="center">
 
-**ECG signal processing from first principles, plus a YOLO beat-detection add-on and a Streamlit demo app.**
-FFT, spectral analysis and filter design built by hand (NumPy / SciPy / Matplotlib / wfdb), measured on real MIT-BIH recordings,
-then connected to a small machine-learning pipeline. Everything runs on a laptop CPU.
+# 🫀 ECG-DSP-Toolkit
 
-![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
-![Data](https://img.shields.io/badge/data-MIT--BIH%20%2B%20NSTDB-informational)
-![Use](https://img.shields.io/badge/use-educational%20only-orange)
+### ECG signal processing from first principles — plus YOLO beat detection
 
-> **Status.** **Part I (DSP)** was run end to end on real MIT-BIH / NSTDB data; the tables in [section 7](#7-results) are the unedited output of that run.
-> **Part II (ML add-on)**: pipeline code, tests and the Streamlit app are included; the YOLO results in [section 9.5](#95-yolo-results-filled-from-your-own-run)
-> appear only after training and are generated from the real output files, so no number there is invented.
+*What does a filter really do to a heartbeat — and can a detector still find the beats?*
+
+<img alt="license MIT" src="https://img.shields.io/badge/license-MIT-blue"> <img alt="python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white"> <img alt="data MIT-BIH and NSTDB" src="https://img.shields.io/badge/data-MIT--BIH%20%2B%20NSTDB-informational"> <img alt="model YOLOv8" src="https://img.shields.io/badge/model-YOLOv8-7B2CBF"> <img alt="app Streamlit" src="https://img.shields.io/badge/app-Streamlit-FF4B4B?logo=streamlit&logoColor=white"> <img alt="tests pytest" src="https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white"> <img alt="use educational only" src="https://img.shields.io/badge/use-educational%20only-orange">
+
+[✨ At a glance](#glance) · [🚀 Quick start](#quick-start) · [🔬 Key finding](#key-finding) · [📐 Theory](#theory) · [📊 Results](#results) · [🤖 ML add-on](#ml) · [📚 References](#references)
+
+</div>
+
+---
+
+<a id="glance"></a>
+
+## ✨ At a glance
+
+ECG-DSP-Toolkit builds the classic ECG conditioning chain **by hand** — FFT, windows, Welch PSD, a windowed-sinc **FIR** and a Butterworth **IIR** (bilinear transform with pre-warping, second-order sections) plus a mains notch —
+then measures every trade-off on **real MIT-BIH recordings** with exact, reproducible SNRs. The same filters then feed a small **ML pipeline**: filtered ECG → strip images → **YOLOv8** beat boxes → a **Streamlit** app.
+It is the Python reference behind my fixed-point Cortex-M4 project, [ECG-Edge](https://github.com/shaurXePo/ECG-Edge).
+
+| | |
+|---|---|
+| 🧮 **FFT from scratch** | recursive + iterative radix-2, inverse and zero padding; matches `numpy.fft` to ~1e-13 and is benchmarked against the O(N²) DFT |
+| 🪟 **Windows and Welch** | rectangular / Hann / Hamming / Blackman (about −13 / −31 / −42 / −58 dB sidelobes); own Welch PSD and spectrogram match SciPy |
+| 📏 **FIR band-pass** | windowed-sinc, 2377 taps (Hamming, 0.5 Hz transition), exactly linear phase, 3.3 s delay |
+| 🎛️ **IIR band-pass** | Butterworth built by hand: prototype → LP2BP → pre-warp → bilinear → SOS, plus a 60 / 50 Hz notch |
+| 🧪 **Real data** | 5 MIT-BIH records × 3 NSTDB noise types × 5 SNRs, exact SNR scaling, R-peak detection scored before and after filtering |
+| 🤖 **ML add-on** | YOLOv8 beat detection on rendered ECG strips with an inter-patient DS1/DS2 split, plus an interactive Streamlit app |
+| ✅ **Tested** | pytest suite (DSP core + vision add-on) that runs offline on a synthetic ECG |
+| 🔌 **Honest by design** | every table is generated from files; results that do not exist yet say so |
+
 > This is an educational project, **not a medical device**.
 
----
-
-## Contents
-
-**Part I: DSP toolkit**
-[1 Motivation](#1-motivation) · [2 Structure](#2-repository-structure) · [3 How to run](#3-how-to-run) ·
-[4 Assumptions](#4-assumptions-and-design-decisions-the-ambiguities-resolved) · [5 Theory](#5-theory-summary) ·
-[6 Figures](#6-figures-and-how-to-read-them) · [7 Results](#7-results) · [8 Limitations](#8-limitations)
-
-**Part II: ML add-on**
-[9 YOLO beat detection and Streamlit app](#9-ml-add-on-yolo-beat-detection-and-streamlit-app)
-
-**Wrap-up**
-[10 Interview questions](#10-interview-questions-dsp-and-ml) · [11 Roadmap](#11-roadmap) · [References](#references)
-
----
-
-## Overview
-
-| | What it is | Where |
-|---|---|---|
-| **Part I** | Hand-written FFT, windows, Welch PSD, windowed-sinc FIR, Butterworth IIR (bilinear + pre-warping, SOS), notch; noise experiments with exact SNRs on MIT-BIH + NSTDB | `src/`, `scripts/01-07` |
-| **Part II** | The same filters feed a pipeline that renders ECG strips, detects beats with YOLOv8 (boxes + class + confidence) and shows them in a Streamlit app | `vision/`, `app/` |
-| **Tests** | pytest suite covering the DSP core and the vision add-on (runs without data, using a synthetic ECG) | `tests/` |
+### 🧭 How it fits together
 
 ```mermaid
 flowchart LR
@@ -51,7 +50,70 @@ flowchart LR
     I --> H
 ```
 
-## Key results at a glance
+---
+
+<a id="quick-start"></a>
+
+## 🚀 Quick start
+
+```bash
+git clone https://github.com/shaurXePo/ECG-Dsp-toolkit.git && cd ECG-Dsp-toolkit
+python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+pytest -q                                   # unit tests (no data needed; falls back to a synthetic ECG)
+python data/download_data.py                # ~25 MB from PhysioNet: records 100,101,119,200,207 + bw,em,ma
+python scripts/run_all.py --update-readme   # all 7 steps; fills the results block below
+```
+
+If a download stalls, fetch the files by hand and check sizes: every MIT-BIH `.dat` here must be exactly 1,950,000 bytes.
+
+Useful options (accepted by `run_all.py` and by the individual scripts where relevant):
+
+```bash
+python scripts/run_all.py --mains-hz 50        # 50 Hz notch for Indian recordings (default 60 for MIT-BIH)
+python scripts/run_all.py --full               # score whole 30-min records instead of 5-min excerpts
+python scripts/06_ecg_experiments.py --with-mains   # add a synthetic mains-hum noise type (what the notch is for)
+python scripts/run_all.py --synthetic          # offline smoke test; writes to results_synthetic/ only
+jupyter notebook notebooks/01_ecg_dsp_walkthrough.ipynb
+```
+
+**Try the ML add-on** (works immediately, no training needed; the classical R-peak detector is used until YOLO weights exist):
+
+```bash
+pip install -r requirements-vision.txt
+streamlit run app/streamlit_app.py
+```
+
+Everything is seeded (`--seed`, default 42), so reruns are identical.
+
+---
+
+<a id="key-finding"></a>
+
+## 🔬 Key finding
+
+> **Linear filters help where the noise is out of band — and barely where it overlaps the ECG.**
+
+| Noise at 0 dB input | ΔSNR, FIR | ΔSNR, `filtfilt` | Why |
+|---|---:|---:|---|
+| baseline wander | +7.4 dB | +7.4 dB | lives below 0.5 Hz, outside the pass-band |
+| muscle artefact | +4.3 dB | +4.6 dB | broadband, only its out-of-band part is removed |
+| electrode motion | +1.1 dB | +1.1 dB | overlaps the ECG band: a band-pass cannot separate it |
+
+Three more things the experiments show (all reproduced by `scripts/04` and `scripts/06`):
+
+* **Second-order sections are not optional here.** With the 0.5 Hz edge at 360 Hz, the textbook (b,a) polynomial form of the same Butterworth band-pass has a pole outside the unit circle at order 8
+  (max radius 1.049, a 65 dB response error), while the SOS form stays stable.
+* **Pre-warping matters.** A 20/150 Hz design measures 19.8/105.2 Hz without it and 20.00/150.00 Hz with it.
+* **The reference is not clean.** The raw record already contains its own drift and out-of-band detail, so ΔSNR is negative at high input SNR (RMSE floor ≈ 0.15 mV for FIR / `filtfilt`, ≈ 0.28 mV for the causal IIR).
+  See [Reading the real-data results](#reading-results).
+
+---
+
+<a id="key-figures"></a>
+
+## 🖼️ Key figures
 
 **Where the noise lives**
 
@@ -87,7 +149,7 @@ flowchart LR
 
 <img src="results/figures/06_snr_improvement.png" alt="SNR improvement vs input SNR" width="820">
 
-<sub>Gains are real where noise dominates (baseline wander about +7 dB at 0 dB input) and negative at high input SNR because the raw record is the reference. See "Reading the real-data results" below.</sub>
+<sub>Gains are real where noise dominates (baseline wander about +7 dB at 0 dB input) and negative at high input SNR because the raw record is the reference. See [Reading the real-data results](#reading-results).</sub>
 
 **Before / after on electrode-motion noise**
 
@@ -95,11 +157,43 @@ flowchart LR
 
 <sub>Electrode motion overlaps the ECG band and is the hardest noise for linear filters.</sub>
 
-More figures and how to read them: see [Section 6](#6-figures-and-how-to-read-them).
+More figures and how to read them: see [Figures and how to read them](#figures).
 
 ---
 
-## 1. Motivation
+<a id="structure"></a>
+
+## 🗂️ Repository structure
+
+```
+ecg-dsp-toolkit/
+  README.md  LICENSE  requirements.txt  requirements-vision.txt  conftest.py  .gitignore
+  src/
+    fft.py        radix-2 DIT FFT (recursive + iterative), inverse, zero padding, naive DFT
+    windows.py    rectangular / Hann / Hamming / Blackman + figures of merit
+    psd.py        periodogram, Welch PSD, spectrogram (own FFT)
+    fir.py        windowed-sinc band-pass from the ideal impulse response, order rule
+    iir.py        Butterworth band-pass from scratch (prototype -> LP2BP -> prewarp -> bilinear), SOS, notch
+    noise.py      exact-SNR noise scaling, synthetic stand-in noise (tests only)
+    metrics.py    SNR, SNR improvement, RMSE, beat matching, Se / PPV / F1
+    io.py         wfdb loading of MIT-BIH + NSTDB, synthetic ECG (tests / offline smoke runs only)
+    analysis.py   *extra*: magnitude / phase / group delay / pole-zero / impulse / step plots
+    peaks.py      *extra*: Pan-Tompkins-style R-peak detector
+    pipeline.py   *extra*: the filter bank compared in the experiments
+  scripts/        01..07 numbered scripts (one per build step) + run_all.py; 08_yolo_results.py fills the YOLO results block
+  notebooks/      01_ecg_dsp_walkthrough.ipynb (guided tour, no stored outputs)
+  vision/         ML add-on: render.py labels.py make_dataset.py train_yolo.py infer.py
+  app/            streamlit_app.py  (interactive demo)
+  tests/          pytest suite (DSP core + vision add-on)
+  data/           download_data.py  (downloaded files go in data/mitdb, data/nstdb)
+  results/figures/  generated figures      docs/  VISION.md (ML add-on guide), REFERENCES.md
+```
+`analysis.py`, `peaks.py` and `pipeline.py` are the only files beyond the requested list; they keep the
+scripts short.
+
+<a id="motivation"></a>
+
+## 📖 Motivation
 
 An ECG is a small (~1 mV) signal sitting on three classic contaminants that live in different parts of the
 spectrum, which is why filter design is the heart of ECG processing:
@@ -116,59 +210,9 @@ a trade-off between noise rejection, waveform distortion, delay and cost. This p
 blocks by hand (so every line can be explained), compares them with SciPy, and measures the trade-offs on real
 recordings with exact, reproducible SNRs.
 
-## 2. Repository structure
+<a id="assumptions"></a>
 
-```
-ecg-dsp-toolkit/
-  README.md  requirements.txt  requirements-vision.txt  conftest.py  .gitignore
-  src/
-    fft.py        radix-2 DIT FFT (recursive + iterative), inverse, zero padding, naive DFT
-    windows.py    rectangular / Hann / Hamming / Blackman + figures of merit
-    psd.py        periodogram, Welch PSD, spectrogram (own FFT)
-    fir.py        windowed-sinc band-pass from the ideal impulse response, order rule
-    iir.py        Butterworth band-pass from scratch (prototype -> LP2BP -> prewarp -> bilinear), SOS, notch
-    noise.py      exact-SNR noise scaling, synthetic stand-in noise (tests only)
-    metrics.py    SNR, SNR improvement, RMSE, beat matching, Se / PPV / F1
-    io.py         wfdb loading of MIT-BIH + NSTDB, synthetic ECG (tests / offline smoke runs only)
-    analysis.py   *extra*: magnitude / phase / group delay / pole-zero / impulse / step plots
-    peaks.py      *extra*: Pan-Tompkins-style R-peak detector
-    pipeline.py   *extra*: the filter bank compared in the experiments
-  scripts/        01..07 numbered scripts (one per build step) + run_all.py; 08_yolo_results.py fills section 9.5
-  notebooks/      01_ecg_dsp_walkthrough.ipynb (guided tour, no stored outputs)
-  vision/         ML add-on: render.py labels.py make_dataset.py train_yolo.py infer.py
-  app/            streamlit_app.py  (interactive demo)
-  tests/          pytest suite (DSP core + vision add-on)
-  data/           download_data.py  (downloaded files go in data/mitdb, data/nstdb)
-  results/figures/  generated figures      docs/  VISION.md (ML add-on guide), REFERENCES.md
-```
-`analysis.py`, `peaks.py` and `pipeline.py` are the only files beyond the requested list; they keep the
-scripts short.
-
-## 3. How to run
-
-```bash
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-pytest -q                               # unit tests (no data needed; falls back to synthetic ECG)
-python data/download_data.py            # ~25 MB from PhysioNet: records 100,101,119,200,207 + bw,em,ma
-python scripts/run_all.py --update-readme    # all 7 steps; fills the results block below
-```
-
-Useful options (accepted by `run_all.py` and by the individual scripts where relevant):
-
-```bash
-python scripts/run_all.py --mains-hz 50        # 50 Hz notch for Indian recordings (default 60 for MIT-BIH)
-python scripts/run_all.py --full               # score whole 30-min records instead of 5-min excerpts
-python scripts/06_ecg_experiments.py --with-mains   # add a synthetic mains-hum noise type (what the notch is for)
-python scripts/run_all.py --synthetic          # offline smoke test; writes to results_synthetic/ only
-jupyter notebook notebooks/01_ecg_dsp_walkthrough.ipynb
-```
-Everything is seeded (`--seed`, default 42), so reruns are identical.
-
-The ML add-on (Streamlit app, YOLO) has its own commands: see [section 9](#9-ml-add-on-yolo-beat-detection-and-streamlit-app).
-
-## 4. Assumptions and design decisions (the ambiguities, resolved)
+## 🧾 Assumptions and design decisions
 
 1. **SNR definition.** Power = mean square of the DC-removed signal; `SNR = 10 log10(P_s / P_n)`. DC is
    excluded because MIT-BIH offsets carry no information and the band-pass removes DC anyway.
@@ -202,9 +246,11 @@ The ML add-on (Streamlit app, YOLO) has its own commands: see [section 9](#9-ml-
     MIT-BIH / NSTDB data under Python 3.14 on Arch Linux. If `download_data.py` stalls, fetch the files by hand and check
     sizes: every MIT-BIH `.dat` here must be exactly 1,950,000 bytes (a truncated file makes `wfdb` raise a broadcast `ValueError`).
 
-## 5. Theory summary
+<a id="theory"></a>
 
-### 5.1 DFT and the radix-2 FFT
+## 📐 Theory summary
+
+### DFT and the radix-2 FFT
 $$X[k]=\sum_{n=0}^{N-1}x[n]\,W_N^{kn},\qquad W_N=e^{-j2\pi/N}$$
 Directly: $N$ multiply-adds per bin $\Rightarrow O(N^2)$. Split into even/odd samples ($E,O$ are $N/2$-point DFTs;
 $W_N^2=W_{N/2}$, $W_N^{k+N/2}=-W_N^k$):
@@ -213,7 +259,7 @@ Recursing gives $\log_2N$ stages of $N/2$ butterflies: $O(N\log N)$. The iterati
 into bit-reversed order, then does the stages in place. Inverse: $x=\overline{\mathrm{FFT}(\overline X)}/N$.
 Zero padding to $2^m$ samples the same DTFT on a denser grid (interpolation, no new information).
 
-### 5.2 Windows, leakage, Welch
+### Windows, leakage, Welch
 Truncating to $N$ samples multiplies by a window; in frequency every tone is convolved with $W(f)$. The **main-lobe
 width** sets resolution, the **sidelobe level** sets dynamic range, and they trade off:
 
@@ -228,14 +274,14 @@ Periodogram $P[k]=|X_w[k]|^2/(f_s\sum w^2)$ has variance that does not shrink wi
 overlapping windowed segments: variance $\propto 1/K$ at the cost of resolution $\approx f_s/N_{seg}$. One-sided PSDs
 double bins $1..N/2-1$.
 
-### 5.3 Windowed-sinc FIR
+### Windowed-sinc FIR
 Ideal band-pass: $h_d[m]=\frac{2f_2}{f_s}\mathrm{sinc}\!\left(\frac{2f_2m}{f_s}\right)-\frac{2f_1}{f_s}\mathrm{sinc}\!\left(\frac{2f_1m}{f_s}\right)$,
 $m=n-M/2$. Truncate to $M+1$ taps and multiply by a window $w[n]$. Transition width and order:
 $$\Delta f\approx\frac{K f_s}{M}\;\Rightarrow\; M=\left\lceil\frac{K f_s}{\Delta f}\right\rceil,\quad K=0.9,\,3.1,\,3.3,\,5.5\ \text{(rect, Hann, Hamming, Blackman)}$$
 Symmetric $h[n]=h[M-n]$ gives $H(e^{j\omega})=A(\omega)e^{-j\omega M/2}$: exactly **linear phase**, constant group delay
 $M/2$ samples. Narrow transitions near DC are expensive: 0.5 Hz at 360 Hz needs 2377 taps.
 
-### 5.4 Butterworth IIR, bilinear transform, pre-warping
+### Butterworth IIR, bilinear transform, pre-warping
 Analogue low-pass prototype: $|H(j\Omega)|^2=1/(1+\Omega^{2N})$, poles $p_k=e^{j\pi(2k+N-1)/2N}$. Steps implemented in `iir.py`:
 
 1. **Pre-warp** the digital edges: $\Omega=2f_s\tan(\pi f/f_s)$, because the bilinear map $s=2f_s\frac{z-1}{z+1}$ compresses the analogue
@@ -250,12 +296,14 @@ Analogue low-pass prototype: $|H(j\Omega)|^2=1/(1+\Omega^{2N})$, poles $p_k=e^{j
 **Zero-phase filtering (`filtfilt`):** filter, reverse, filter, reverse. Net response $|H|^2$ with zero phase; non-causal (offline only);
 -3 dB edges become -6 dB. Causal filtering has *non-constant group delay*, so the QRS (broadband) is reshaped.
 
-### 5.5 Exact SNR scaling and metrics
+### Exact SNR scaling and metrics
 $$\alpha=\sqrt{\frac{P_s}{P_n\,10^{\mathrm{SNR}/10}}},\qquad y=s+\alpha n\;\Rightarrow\;10\log_{10}\frac{P_s}{\alpha^2P_n}=\mathrm{SNR}$$
 Output $\mathrm{SNR}=10\log_{10}\frac{\sum\tilde s^2}{\sum(\tilde y-\tilde s)^2}$ (tilde = DC removed), $\Delta\mathrm{SNR}=\mathrm{SNR}_{out}-\mathrm{SNR}_{in}$,
 $\mathrm{RMSE}=\sqrt{\mathrm{mean}(\tilde y-\tilde s)^2}$, $Se=TP/(TP+FN)$, $PPV=TP/(TP+FP)$, $F1=2\,Se\,PPV/(Se+PPV)$.
 
-## 6. Figures and how to read them
+<a id="figures"></a>
+
+## 📈 Figures and how to read them
 
 Run `python scripts/run_all.py`; figures appear in `results/figures/`. Descriptions below say what the theory predicts;
 data-dependent plots (marked *data*) should be checked against your own run.
@@ -277,7 +325,7 @@ data-dependent plots (marked *data*) should be checked against your own run.
 | [`04_notch_demo.png`](results/figures/04_notch_demo.png) | The notch carves a narrow null at the mains frequency in the PSD while leaving neighbouring frequencies and the ECG band untouched. Notch response: deep null at f0, ~0 dB elsewhere. |
 | `05_report_*.png` (5 files) | Per filter: magnitude, phase, group delay, pole-zero, impulse and step responses. FIR: flat group delay, symmetric impulse response (pole-zero shown for a 41-tap surrogate because a 2376-degree polynomial cannot be root-found reliably). Causal IIR: all poles inside the unit circle, zeros at z=±1 (DC/Nyquist) and on the circle at the notch, non-flat group delay peaking near 0.5 Hz and at the notch. Filtfilt: zero phase, symmetric (non-causal) impulse response with squared magnitude. |
 | `06_before_after_{bw,em,ma}.png` | *data* Stacked traces (noisy, FIR, IIR causal, lag-corrected, filtfilt) over the clean record at 6 dB with detected R peaks. Expect wander removed cleanly, muscle noise reduced but not removed, and electrode motion the hardest because it overlaps the ECG band. |
-| [`06_snr_improvement.png`](results/figures/06_snr_improvement.png) | *data* ΔSNR vs input SNR per noise type and method. Zero-phase methods should track each other closely; the causal IIR is expected to sit lower at high input SNR because its distortion floor (see Limitations) caps SNR_out. |
+| [`06_snr_improvement.png`](results/figures/06_snr_improvement.png) | *data* ΔSNR vs input SNR per noise type and method. Zero-phase methods should track each other closely; the causal IIR is expected to sit lower at high input SNR because its distortion floor (see [Limitations](#limitations)) caps SNR_out. |
 | [`06_peak_f1.png`](results/figures/06_peak_f1.png) | *data* R-peak F1 vs input SNR. The detector has its own 5-15 Hz zero-phase band-pass, so the curves for all filters nearly coincide; the only clear degradation is electrode motion at 0-6 dB. This figure shows the filters do not hurt detection, not that one filter is better. |
 
 <details>
@@ -377,7 +425,9 @@ data-dependent plots (marked *data*) should be checked against your own run.
 
 </details>
 
-## 7. Results
+<a id="results"></a>
+
+## 📊 Results
 
 Generated by `python scripts/run_all.py --update-readme` (or `07_results_table.py --update-readme`) from
 `results/metrics_per_record.csv`. The block below is the unedited output of a real run (MIT-BIH records 100, 101, 119, 200, 207;
@@ -452,6 +502,8 @@ distortion); **Se/PPV** are R-peak detection scores before ("no filter") and aft
 results, compare methods *within a row* (same noise, same SNR) and say which record(s) drive any anomaly (200 and 207 are
 the hardest).
 
+<a id="reading-results"></a>
+
 ### Reading the real-data results
 
 * **Distortion floor.** At 24 dB input SNR the added noise alone contributes about 0.02 mV RMSE, yet FIR and `filtfilt` sit near 0.15 mV for every
@@ -465,7 +517,9 @@ the hardest).
 * **Planned improvement:** also report SNR against the *filtered* clean record (filter the clean signal and the noise separately, valid because the filters are linear),
   which separates denoising from distortion.
 
-## 8. Limitations
+<a id="limitations"></a>
+
+## ⚠️ Limitations
 
 * **The reference is not truly clean** (it contains the record's own noise), so absolute SNRs are relative and ΔSNR can be negative at high input SNR.
 * **Sample-wise comparison penalises timing/shape changes.** The causal IIR is not delay-compensated, and even the lag-corrected diagnostic cannot undo the *non-constant* group delay, so it carries a distortion floor in SNR_out/RMSE. This is a property of causal filtering, not a bug, but it means the SNR metric partly measures phase distortion.
@@ -475,15 +529,17 @@ the hardest).
 * **Detector** is a simplified Pan-Tompkins (no T-wave discrimination, one search-back rule). Absolute Se/PPV are not clinical numbers; use them to compare filters, not to benchmark detectors.
 * **Five records, 5-minute excerpts by default**: enough for trends, not for population claims. NSTDB noise is applied at one random offset per (record, noise).
 * **Pole-zero plot of the 2377-tap FIR** uses a surrogate (root-finding of a 2376-degree polynomial is ill-conditioned).
-* **Scope of validation:** the full pipeline was run on five real records (300 s each). Results were not cross-checked against another toolbox, and the SNR/RMSE columns use the raw record as reference (see 7).
+* **Scope of validation:** the full pipeline was run on five real records (300 s each). Results were not cross-checked against another toolbox, and the SNR/RMSE columns use the raw record as reference (see [Results](#results)).
 
-## 9. ML add-on: YOLO beat detection and Streamlit app
+<a id="ml"></a>
+
+## 🤖 ML add-on: YOLO beat detection and Streamlit app
 
 The DSP toolkit becomes the front end of a small ML pipeline: the filtered ECG is rendered as an image, a YOLOv8 detector draws one box per heartbeat
 (class + confidence), and a Streamlit app draws the boxes back on the signal. Code: [`vision/`](vision/) and [`app/streamlit_app.py`](app/streamlit_app.py);
 a step-by-step guide is in [`docs/VISION.md`](docs/VISION.md).
 
-### 9.1 How the DSP and ML parts connect
+### How the DSP and ML parts connect
 
 | Toolkit piece | Role in the ML pipeline |
 |---|---|
@@ -494,7 +550,7 @@ a step-by-step guide is in [`docs/VISION.md`](docs/VISION.md).
 | `vision/render.py`, `vision/labels.py` | filtered window to image with an exact pixel-to-time mapping, and YOLO boxes from expert annotations |
 | `vision/make_dataset.py`, `vision/train_yolo.py`, `vision/infer.py` | dataset with inter-patient split, training and evaluation, inference in seconds |
 
-### 9.2 Design decisions
+### Design decisions
 
 * **Order of operations:** add noise to the whole excerpt, filter the whole excerpt, trim 5 s at both ends, then cut windows. Filters need seconds of context.
 * **Inter-patient split** (de Chazal DS1/DS2): train and validation records from DS1, test records from DS2, never the same record in two splits (unit-tested).
@@ -504,7 +560,7 @@ a step-by-step guide is in [`docs/VISION.md`](docs/VISION.md).
 * **Images:** 4 s windows (stride 2 s) rendered at 640 × 256 px, black trace on white, no grid; 160 px per second. Amplitude is normalised per window, so absolute mV is not visible to the model.
 * **Training:** YOLOv8n by default. Flips and colour jitter are off (a flipped ECG is a different waveform); mosaic is off by default. Only test-split (DS2) numbers are reported.
 
-### 9.3 The Streamlit app
+### The Streamlit app
 
 ```bash
 pip install -r requirements-vision.txt
@@ -519,35 +575,39 @@ streamlit run app/streamlit_app.py
 
 <!-- To show a screenshot: save it as docs/images/app.png and add the line  ![Streamlit app](docs/images/app.png)  here. -->
 
-### 9.4 Build the dataset, train, evaluate
+### Build the dataset, train, evaluate
 
 ```bash
 python -m vision.make_dataset --noise-snrs 12 6        # clean + noisy copies (3 noise types x 2 SNRs)
 python -m vision.train_yolo --data datasets/ecg_yolo/dataset.yaml --epochs 30
-python scripts/08_yolo_results.py --update-readme       # fills section 9.5 from the real output files
+python scripts/08_yolo_results.py --update-readme       # fills the YOLO results block from the real output files
 python -m vision.make_dataset --synthetic               # offline smoke test only (fake labels, never reported)
 ```
 
 With the five default records the split is DS1 = 101, 119, 207 and DS2 = 100, 200: enough to test the pipeline, **not** enough for conclusions.
 Download more DS1/DS2 records before drawing any. The script prints the split and the number of boxes per class.
 
-### 9.5 YOLO results (filled from your own run)
+<a id="yolo-results"></a>
+
+### YOLO results (filled from your own run)
 
 <!-- YOLO:START -->
 _Not generated yet. After training, run `python scripts/08_yolo_results.py --update-readme`. No number is written here by hand._
 <!-- YOLO:END -->
 
-### 9.6 Limitations of the ML part
+### Limitations of the ML part
 
 * **Small data by default** (five records). Class N dominates; S, V and F are rare, so read per-class AP, not only mAP. Class Q is excluded.
 * **Boxes are beat locators**, not wave delineation, and the time resolution is limited by pixels (6.25 ms per pixel at 160 px/s).
 * **Per-window amplitude normalisation** hides absolute voltage, which can matter for ventricular beats.
-* **Not yet compared** with a 1D CNN or LSTM beat classifier on the same split (see the roadmap). YOLO is not expected to win by default.
+* **Not yet compared** with a 1D CNN or LSTM beat classifier on the same split (see the [Roadmap](#roadmap)). YOLO is not expected to win by default.
 * **Detector fallback:** the classical R-peak detector labels every beat "R"; it does not classify.
 * Ultralytics YOLO is licensed AGPL-3.0, which is fine for an open-source repository; read the licence before any commercial use.
 * Educational demo; **not for diagnosis**.
 
-## 10. Interview questions (DSP and ML)
+<a id="interview"></a>
+
+## 🎤 Interview questions (DSP and ML)
 
 **1. Why is the FFT O(N log N) and what does "radix-2 DIT" mean?**
 The DFT is N dot products of length N. Splitting the input into even and odd samples gives two N/2-point DFTs, and
@@ -593,16 +653,23 @@ YOLO is an image detector, so the ECG is rendered as a strip image with an exact
 visual output. Its costs: time resolution is limited by pixels (640 px for 4 s = 6.25 ms per pixel), amplitude is normalised per window, and it is heavy for a 1D problem.
 For pure beat classification a 1D CNN or LSTM is the natural baseline, so I would compare them on the same DS2 split and report per-class results, not just mAP.
 
-## 11. Roadmap
+<a id="roadmap"></a>
 
-Planned, not done:
+## 🗺️ Roadmap
+
+**Done in a companion repository**
+
+* **[ECG-Edge](https://github.com/shaurXePo/ECG-Edge):** the filters of this toolkit ported to fixed-point on an ARM Cortex-M4, validated against the Python reference.
+
+**Planned, not done**
 
 * **ECG-ML:** a compact 1D CNN and a BiLSTM beat classifier (with RR-interval features) on the same DS1/DS2 split, compared with YOLO and the classical baseline.
-* **Band-matched SNR:** report SNR against the filtered clean record as a second column (see "Planned improvement" in section 7).
-* **ECG-Edge:** fixed-point (Q15) port of the filters to an ARM Cortex-M (STM32F446RE), validated against the Python reference.
+* **Band-matched SNR:** report SNR against the filtered clean record as a second column (see "Planned improvement" in [Results](#reading-results)).
 * **Deployment:** host the Streamlit app (Streamlit Community Cloud) once weights and a small demo dataset are available.
 
-## References
+<a id="references"></a>
+
+## 📚 References
 
 Full list with links: [`docs/REFERENCES.md`](docs/REFERENCES.md).
 
@@ -613,3 +680,11 @@ Luo & Johnston, "A review of electrocardiogram filtering", J. Electrocardiology 
 
 **ML.** de Chazal, O'Dwyer & Reilly, "Automatic classification of heartbeats using ECG morphology and heartbeat interval features", IEEE TBME 51(7):1196-1206, 2004 (DS1/DS2 protocol);
 "A Novel real-time arrhythmia detection model using YOLOv8", arXiv:2305.16727.
+
+---
+
+<div align="center">
+
+**Educational use only — not a medical device.** · Licensed under the [MIT License](LICENSE).
+
+</div>
