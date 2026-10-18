@@ -1,0 +1,6 @@
+# extra packages for the vision/ add-on and the Streamlit app (on top of requirements.txt)
+streamlit>=1.66
+plotly>=5.20
+pillow>=10.0
+# only needed to train / run YOLO (AGPL-3.0 licence); the app works without it using the classical detector
+ultralytics>=8.2

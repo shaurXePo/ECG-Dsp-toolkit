@@ -7,3 +7,8 @@ results_synthetic/
 .venv/
 *.pyc
 docs/STUDY_PLAN_AND_INTERVIEW_GUIDE.md
+
+# vision add-on artefacts
+datasets/
+runs/
+*.pt
