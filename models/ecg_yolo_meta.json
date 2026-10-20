@@ -1,0 +1,33 @@
+{
+  "names": {
+    "0": "N",
+    "1": "S",
+    "2": "V",
+    "3": "F"
+  },
+  "imgsz": 640,
+  "weights": "runs/detect/ecg_yolo/weights/best.pt",
+  "splits": {
+    "train": [
+      "101",
+      "119"
+    ],
+    "val": [
+      "207"
+    ],
+    "test": [
+      "100",
+      "200"
+    ]
+  },
+  "test_metrics": {
+    "weights": "runs/detect/ecg_yolo/weights/best.pt",
+    "map50": 0.5289945629016216,
+    "map50_95": 0.4584069362300977,
+    "ap50_per_class": {
+      "N": 0.9843285701862804,
+      "S": 0.0,
+      "V": 0.6026551185185846
+    }
+  }
+}

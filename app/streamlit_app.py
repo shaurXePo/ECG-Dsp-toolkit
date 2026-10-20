@@ -34,7 +34,9 @@ st.set_page_config(page_title="ECG-DSP Lab", page_icon=":anatomical_heart:", lay
 
 COLORS = {"N": "#2ECC71", "S": "#F39C12", "V": "#E74C3C", "F": "#9B59B6", "Q": "#95A5A6", "R": "#1ABC9C"}
 NOISE_NAMES = {"bw": "baseline wander", "em": "electrode motion", "ma": "muscle artefact"}
-DEFAULT_WEIGHTS = "runs/detect/ecg_yolo/weights/best.pt"
+DEFAULT_WEIGHTS = next((w for w in ("models/ecg_yolo_best.onnx", "runs/detect/ecg_yolo/weights/best.pt")
+                        if (ROOT / w).exists()), "models/ecg_yolo_best.onnx")
+SAMPLE_DIR = ROOT / "app" / "sample_data"
 
 
 # --------------------------------------------------------------------------- cached helpers
@@ -55,6 +57,10 @@ def load_source(kind: str, name: str, duration_s: float, upload_bytes: bytes | N
         r = ecgio.synthetic_record("synthetic", duration_s=duration_s, seed=7)
         return dict(signal=r["signal"], fs=r["fs"], ann_sample=r["ann_sample"], ann_symbol=r["ann_symbol"],
                     label="synthetic")
+    if kind == "Bundled MIT-BIH demo":
+        z = np.load(SAMPLE_DIR / f"{name}.npz", allow_pickle=False)
+        return dict(signal=z["signal"].astype(float), fs=float(z["fs"]), ann_sample=z["ann_sample"],
+                    ann_symbol=z["ann_symbol"], label=f"MIT-BIH {z['record']} (bundled excerpt)")
     if kind == "MIT-BIH record":
         r = ecgio.load_record(name, duration_s=duration_s)
         return dict(signal=r["signal"], fs=r["fs"], ann_sample=r["ann_sample"], ann_symbol=r["ann_symbol"],
@@ -105,14 +111,24 @@ def detect_all(y: np.ndarray, fs: float, use_yolo: bool, weights: str, conf: flo
     return [(d.label, d.conf, d.t0, d.t1) for d in infer.classical_detect(y, fs)], "classical"
 
 
+def _splits():
+    for f in (ROOT / "datasets/ecg_yolo/dataset_summary.json", ROOT / "models/ecg_yolo_meta.json"):
+        try:
+            sp = json.loads(f.read_text()).get("splits")
+            if sp:
+                return sp
+        except Exception:                          # noqa: BLE001
+            continue
+    return None
+
+
 def split_status(src_kind: str, rec: str) -> tuple[str, str]:
     """('ok' | 'warn' | 'info', message): was this record used to train / validate the loaded model?"""
-    if src_kind != "MIT-BIH record":
+    if src_kind not in ("MIT-BIH record", "Bundled MIT-BIH demo"):
         return "info", "Not an MIT-BIH record, so there is no train/test bookkeeping for it."
-    try:
-        sp = json.loads((ROOT / "datasets/ecg_yolo/dataset_summary.json").read_text())["splits"]
-    except Exception:                              # noqa: BLE001
-        return "info", "datasets/ecg_yolo/dataset_summary.json not found: cannot tell whether this record was used for training."
+    sp = _splits()
+    if sp is None:
+        return "info", "No train/test record list found (datasets/ecg_yolo/dataset_summary.json or models/ecg_yolo_meta.json): cannot tell whether this record was used for training."
     if rec in sp.get("train", []):
         return "warn", f"Record {rec} was a TRAINING record of this model: the result below is optimistic and not a valid test."
     if rec in sp.get("val", []):
@@ -121,6 +137,7 @@ def split_status(src_kind: str, rec: str) -> tuple[str, str]:
         return "ok", f"Record {rec} is a TEST record (DS2) that the model never saw: this is a fair check."
     return "info", f"Record {rec} was not used in this run (neither training, validation nor test): unseen, but not part of the reported test set."
 
+
 # --------------------------------------------------------------------------- sidebar
 st.title("ECG-DSP Lab")
 st.caption("FIR / IIR filtering from scratch + YOLO beat detection. Educational demo, not a medical device.")
@@ -128,9 +145,13 @@ st.caption("FIR / IIR filtering from scratch + YOLO beat detection. Educational 
 with st.sidebar:
     st.header("1. Signal")
     recs = mit_records()
-    sources = ["Synthetic demo ECG"] + (["MIT-BIH record"] if recs else []) + ["Upload CSV"]
+    bundled = sorted(p.stem for p in SAMPLE_DIR.glob("*.npz"))
+    sources = (["Bundled MIT-BIH demo"] if bundled else []) + ["Synthetic demo ECG"] \
+        + (["MIT-BIH record"] if recs else []) + ["Upload CSV"]
     src_kind = st.radio("Source", sources)
     rec_name, up_bytes, up_fs = "", None, 360.0
+    if src_kind == "Bundled MIT-BIH demo":
+        rec_name = st.selectbox("Excerpt", bundled)
     if src_kind == "MIT-BIH record":
         rec_name = st.selectbox("Record", recs)
     if src_kind == "Upload CSV":
@@ -233,7 +254,8 @@ with st.expander("Model check against the reference annotations"):
     if not len(ann):
         st.write("This source has no reference annotations (uploaded CSV), so there is nothing to compare with.")
     else:
-        kind, msg = split_status(src_kind, rec_name)
+        rec_id = rec_name.split('_')[1] if src_kind == 'Bundled MIT-BIH demo' and '_' in rec_name else rec_name
+        kind, msg = split_status(src_kind, rec_id)
         {"ok": st.success, "warn": st.warning, "info": st.info}[kind](msg)
         if st.checkbox("Run the detector on the whole analysed excerpt and compare"):
             dets_all, used = detect_all(y, fs, det_kind.startswith("YOLO"), weights, float(conf))

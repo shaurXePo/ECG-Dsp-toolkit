@@ -33,16 +33,25 @@ class Detection:
 
 
 def load_yolo(weights: str):
-    """Returns (model or None, message). Never raises: the app falls back to the classical detector."""
+    """Returns (model or None, message). Never raises: the app falls back to the classical detector.
+    '.onnx' weights run with onnxruntime only (cloud-friendly); '.pt' weights need ultralytics + torch."""
     p = Path(weights)
+    if not p.exists() and not p.is_absolute() and (ROOT / p).exists():
+        p = ROOT / p                                   # hosted apps may start from another working directory
     if not p.exists():
-        return None, f"weights not found: {p}"
+        return None, f"weights not found: {weights}"
+    if p.suffix == ".onnx":
+        try:
+            from vision.onnx_infer import OnnxYolo
+            return OnnxYolo(p), f"loaded {p.name} (onnxruntime)"
+        except Exception as e:                           # noqa: BLE001
+            return None, f"could not load ONNX model ({e.__class__.__name__}: {e}); pip install onnxruntime"
     try:
         from ultralytics import YOLO
     except Exception as e:                           # noqa: BLE001
         return None, f"ultralytics not installed ({e.__class__.__name__}); pip install ultralytics"
     try:
-        return YOLO(str(p)), f"loaded {p}"
+        return YOLO(str(p)), f"loaded {p.name}"
     except Exception as e:                           # noqa: BLE001
         return None, f"could not load weights: {e}"
 
@@ -50,6 +59,9 @@ def load_yolo(weights: str):
 def yolo_detect_window(model, y_window, fs: float, conf: float = 0.25, iou: float = 0.5,
                        classes=CLASSES) -> list[Detection]:
     strip = render_strip(y_window, fs)
+    if hasattr(model, "predict_xyxy"):                  # onnxruntime path (no torch)
+        return [Detection(str(model.names[c]), cf, float(strip.px_to_time(x0)), float(strip.px_to_time(x1)))
+                for x0, _, x1, _, c, cf in model.predict_xyxy(strip.image, conf=conf, iou=iou)]
     res = model.predict(np.asarray(strip.image), imgsz=max(strip.size), conf=conf, iou=iou, verbose=False)[0]
     names = getattr(model, "names", None) or {i: c for i, c in enumerate(classes)}
     out = []

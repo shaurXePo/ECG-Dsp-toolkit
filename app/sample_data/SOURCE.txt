@@ -1,0 +1,4 @@
+Excerpts of the MIT-BIH Arrhythmia Database (PhysioNet).
+Moody GB, Mark RG. The impact of the MIT-BIH Arrhythmia Database. IEEE Eng Med Biol 20(3):45-50 (2001).
+Goldberger et al. PhysioBank, PhysioToolkit, and PhysioNet. Circulation 101(23):e215-e220 (2000).
+https://physionet.org/content/mitdb/1.0.0/  (see the page for licence terms)
