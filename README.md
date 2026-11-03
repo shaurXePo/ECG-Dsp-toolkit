@@ -633,7 +633,7 @@ _Read per-class AP together with the box counts: a class with few test boxes giv
 
 <a id="interview"></a>
 
-## 🎤 Interview questions (DSP and ML)
+## 🎤 Interview questions (DSP)
 
 **1. Why is the FFT O(N log N) and what does "radix-2 DIT" mean?**
 The DFT is N dot products of length N. Splitting the input into even and odd samples gives two N/2-point DFTs, and
@@ -664,20 +664,6 @@ I mix noise at an exact SNR (α = √(P_s/(P_n·10^{SNR/10})), tested to 1e-9 dB
 sensitivity/PPV, because SNR alone can hide timing/shape distortion and a clinically relevant outcome is "do we still find the beats?".
 `filtfilt` gives zero phase but squares the magnitude (−3 dB edges become −6 dB, steeper skirts), doubles the effective order, is non-causal, and has edge transients
 (hence the 5 s trim). I also separate causal-filter delay from shape distortion with the lag-corrected diagnostic.
-
-**6. Why an inter-patient split, and what goes wrong with a beat-level split?**
-If beats from the same patient appear in both train and test, the model can learn that patient's morphology, so test accuracy is inflated. I follow the de Chazal DS1/DS2
-protocol: train and validation records come from DS1 (validation chosen by record), test records from DS2, and no record is in two splits (unit-tested). Noise for
-train/val comes from the first half of each NSTDB recording and for test from the second half, so even the noise is not shared.
-
-**7. Why filter the whole excerpt before cutting windows?**
-Filters need seconds of context: a 0.5 Hz high-pass cannot be applied meaningfully to a 4 s window, and the FIR has a 3.3 s delay and edge transient. So the pipeline adds noise
-to the whole excerpt, filters it, trims 5 s at both ends, and only then cuts windows and renders them.
-
-**8. Why YOLO for a 1D signal, and what would you compare it with?**
-YOLO is an image detector, so the ECG is rendered as a strip image with an exact pixel-to-time mapping. Its advantages are localisation without a separate R-peak detector and a
-visual output. Its costs: time resolution is limited by pixels (640 px for 4 s = 6.25 ms per pixel), amplitude is normalised per window, and it is heavy for a 1D problem.
-For pure beat classification a 1D CNN or LSTM is the natural baseline, so I would compare them on the same DS2 split and report per-class results, not just mAP.
 
 <a id="roadmap"></a>
 
