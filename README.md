@@ -631,40 +631,6 @@ _Read per-class AP together with the box counts: a class with few test boxes giv
 * Ultralytics YOLO is licensed AGPL-3.0, which is fine for an open-source repository; read the licence before any commercial use.
 * Educational demo; **not for diagnosis**.
 
-<a id="interview"></a>
-
-## 🎤 Interview questions (DSP)
-
-**1. Why is the FFT O(N log N) and what does "radix-2 DIT" mean?**
-The DFT is N dot products of length N. Splitting the input into even and odd samples gives two N/2-point DFTs, and
-the N outputs are recovered with N/2 butterflies ($E\pm W^kO$) using the symmetry $W_N^{k+N/2}=-W_N^k$. Recursing
-log₂N times gives N/2·log₂N butterflies. "Radix-2" = split by 2; "decimation in time" = the split is on time indices.
-The iterative version works on the bit-reversed input so each stage is in place. Zero padding to 2^m is how arbitrary lengths are handled.
-
-**2. Two close sinusoids, one much weaker: which window do you use and why?**
-Leakage is the convolution with the window's spectrum. The rectangular window has the narrowest main lobe (best
-resolution for equal tones) but −13 dB slowly decaying sidelobes, which bury a weak tone. Hann/Blackman have lower, faster-decaying
-sidelobes (better dynamic range) at the cost of a wider main lobe. Pick by the question: resolution vs dynamic range; for Welch
-averaging use Hann with 50 % overlap so the tapered-away data is recovered.
-
-**3. Why is your FIR 2377 taps long, and why would you ever choose it over an IIR for ECG?**
-Windowed-sinc order is $M\approx Kf_s/\Delta f$: a 0.5 Hz transition at 360 Hz with Hamming (K = 3.3) needs ~2376. In return you
-get exactly linear phase (symmetric taps → constant delay M/2), unconditional stability and no waveform distortion. The price is
-delay (3.3 s) and computation. An IIR meets the same magnitude spec with a handful of biquads but has non-linear phase, which reshapes the QRS
-unless you run it forward-backward (offline).
-
-**4. Explain the bilinear transform, pre-warping and why you used second-order sections.**
-Bilinear: $s=2f_s(z-1)/(z+1)$ maps the whole analogue frequency axis onto the unit circle once (no aliasing) and preserves stability, but warps frequency:
-$\Omega=2f_s\tan(\omega/2)$. Pre-warping computes the analogue edges from the wanted digital edges with that formula so the −3 dB points land exactly
-where intended (my script shows a 20/150 Hz design landing near 105 Hz without it). SOS: poles very close to z = 1 (0.5 Hz at 360 Hz) make a single
-high-order (b,a) polynomial ill-conditioned; biquads keep each factor well-conditioned (the script shows (b,a) failing at higher order).
-
-**5. How do you know the denoising works, and what does `filtfilt` do to your numbers?**
-I mix noise at an exact SNR (α = √(P_s/(P_n·10^{SNR/10})), tested to 1e-9 dB), then report ΔSNR and RMSE against the original record plus R-peak
-sensitivity/PPV, because SNR alone can hide timing/shape distortion and a clinically relevant outcome is "do we still find the beats?".
-`filtfilt` gives zero phase but squares the magnitude (−3 dB edges become −6 dB, steeper skirts), doubles the effective order, is non-causal, and has edge transients
-(hence the 5 s trim). I also separate causal-filter delay from shape distortion with the lag-corrected diagnostic.
-
 <a id="roadmap"></a>
 
 ## 🗺️ Roadmap
